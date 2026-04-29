@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # JobPilot Web App
+  jobpilot-app:
+    build: .
+    container_name: jobpilot-app
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - FLASK_ENV=production
+    restart: unless-stopped
+    networks:
+      - jobpilot-net
+
+  # JobPilot Bot (background scraper/scorer)
+  jobpilot-bot:
+    build: .
+    container_name: jobpilot-bot
+    entrypoint: python bot.py
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    depends_on:
+      - jobpilot-app
+    restart: unless-stopped
+    networks:
+      - jobpilot-net
+    environment:
+      - PYTHONUNBUFFERED=1
+
+  # Prometheus (Metrics)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: jobpilot-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-storage:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    restart: unless-stopped
+    networks:
+      - jobpilot-net
+
+  # Grafana (Dashboard)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: jobpilot-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=admin
+    restart: unless-stopped
+    networks:
+      - jobpilot-net
+
+  # Uptime Kuma (Monitoring)
+  uptime-kuma:
+    image: louislam/uptime-kuma:latest
+    container_name: jobpilot-uptime
+    ports:
+      - "3001:3001"
+    volumes:
+      - uptime-storage:/app/data
+    restart: unless-stopped
+    networks:
+      - jobpilot-net
+
+networks:
+  jobpilot-net:
+    driver: bridge
+
+volumes:
+  prometheus-storage:
+  grafana-storage:
+  uptime-storage:
