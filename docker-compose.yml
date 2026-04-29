@@ -1,7 +1,8 @@
 version: '3.8'
 
 services:
-  # JobPilot Web App
+
+  # ── JobPilot Dashboard ─────────────────────────────────────────────────────
   jobpilot-app:
     build: .
     container_name: jobpilot-app
@@ -12,11 +13,22 @@ services:
       - ./logs:/app/logs
     environment:
       - FLASK_ENV=production
+      - SECRET_KEY=${SECRET_KEY:-jobpilot-change-me}
+      - USAJOBS_API_KEY=${USAJOBS_API_KEY:-}
+      - USAJOBS_EMAIL=${USAJOBS_EMAIL:-jobpilot@example.com}
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     networks:
       - jobpilot-net
 
-  # JobPilot Bot (background scraper/scorer)
+  # ── JobPilot Bot (background scraper + AI scorer) ──────────────────────────
+  # Fixed: depends_on now waits for the app to actually be healthy before
+  # the bot starts — Copilot's version just waited for container start.
   jobpilot-bot:
     build: .
     container_name: jobpilot-bot
@@ -24,31 +36,35 @@ services:
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+      - USAJOBS_API_KEY=${USAJOBS_API_KEY:-}
+      - USAJOBS_EMAIL=${USAJOBS_EMAIL:-jobpilot@example.com}
     depends_on:
-      - jobpilot-app
+      jobpilot-app:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - jobpilot-net
-    environment:
-      - PYTHONUNBUFFERED=1
 
-  # Prometheus (Metrics)
+  # ── Prometheus ─────────────────────────────────────────────────────────────
   prometheus:
     image: prom/prometheus:latest
     container_name: jobpilot-prometheus
     ports:
       - "9090:9090"
     volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-storage:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
     restart: unless-stopped
     networks:
       - jobpilot-net
 
-  # Grafana (Dashboard)
+  # ── Grafana ────────────────────────────────────────────────────────────────
   grafana:
     image: grafana/grafana:latest
     container_name: jobpilot-grafana
@@ -57,15 +73,17 @@ services:
     volumes:
       - grafana-storage:/var/lib/grafana
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
     restart: unless-stopped
     networks:
       - jobpilot-net
 
-  # Uptime Kuma (Monitoring)
+  # ── Uptime Kuma ────────────────────────────────────────────────────────────
+  # Fixed: use :1 tag — louislam/uptime-kuma:latest has ARM64 issues on Pi
   uptime-kuma:
-    image: louislam/uptime-kuma:latest
+    image: louislam/uptime-kuma:1
     container_name: jobpilot-uptime
     ports:
       - "3001:3001"

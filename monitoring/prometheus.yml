@@ -1,0 +1,16 @@
+# Prometheus config for JobPilot
+# Copilot's docker-compose.yml volume-mounted this file but never created it,
+# which caused the Prometheus container to crash on every startup.
+global:
+  scrape_interval:     30s
+  evaluation_interval: 30s
+
+scrape_configs:
+  - job_name: 'jobpilot'
+    static_configs:
+      - targets: ['jobpilot-app:5000']
+    metrics_path: '/health'
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
