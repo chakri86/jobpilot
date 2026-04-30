@@ -156,7 +156,7 @@ def run_cycle():
             
             try:
                 # Use new multi-source scraper (jobspy, remotive, arbeitnow, usajobs)
-                jobs = scrape_all(s["keywords"], s["location"], s.get("job_type", "fulltime"))
+                jobs = scrape_all(s["keywords"], s["location"])
                 
                 for j in jobs:
                     # Check if job already exists
