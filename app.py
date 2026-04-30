@@ -33,7 +33,7 @@ def init_db():
             location TEXT DEFAULT '', resume_text TEXT DEFAULT '',
             skills TEXT DEFAULT '', target_titles TEXT DEFAULT '',
             job_type TEXT DEFAULT 'fulltime', min_salary TEXT DEFAULT '',
-            min_score INTEGER DEFAULT 75, check_interval INTEGER DEFAULT 15,
+            min_score INTEGER DEFAULT 75, check_interval INTEGER DEFAULT 30,
             anthropic_api_key TEXT DEFAULT '',
             usajobs_api_key TEXT DEFAULT '',
             email_enabled INTEGER DEFAULT 0, email_sender TEXT DEFAULT '',
@@ -302,7 +302,7 @@ textarea{resize:vertical;min-height:120px;font-size:13px}
   <div class="card"><div class="card-title">⚙️ Settings</div>
     <div class="form-row">
       <div><label>Check Interval (minutes)</label>
-        <input name="check_interval" type="number" min="5" max="120" value="{{ p.check_interval if p else 15 }}">
+        <input name="check_interval" type="number" min="5" max="120" value="{{ p.check_interval if p else 30 }}">
       </div>
       <div></div>
     </div>
@@ -550,7 +550,7 @@ def create():
         (d.get("name"), d.get("email"), d.get("phone"), d.get("location"),
          d.get("resume_text"), d.get("skills"), d.get("target_titles"),
          d.get("job_type","fulltime"), d.get("min_salary"),
-         int(d.get("min_score",75)), int(d.get("check_interval",15)),
+         int(d.get("min_score",75)), int(d.get("check_interval",30)),
          d.get("anthropic_api_key"), d.get("usajobs_api_key"),
          int(bool(d.get("email_enabled"))), d.get("email_sender"),
          d.get("email_password"), d.get("email_receiver"),
@@ -586,7 +586,7 @@ def save(pid):
         (d.get("name"), d.get("email"), d.get("phone"), d.get("location"),
          d.get("resume_text"), d.get("skills"), d.get("target_titles"),
          d.get("job_type","fulltime"), d.get("min_salary"),
-         int(d.get("min_score",75)), int(d.get("check_interval",15)),
+         int(d.get("min_score",75)), int(d.get("check_interval",30)),
          d.get("anthropic_api_key"), d.get("usajobs_api_key"),
          int(bool(d.get("email_enabled"))), d.get("email_sender"),
          d.get("email_password"), d.get("email_receiver"),
