@@ -41,6 +41,7 @@ def init_db():
             telegram_enabled INTEGER DEFAULT 0,
             telegram_bot_token TEXT DEFAULT '', telegram_chat_id TEXT DEFAULT '',
             is_active INTEGER DEFAULT 1,
+            run_now INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE IF NOT EXISTS job_searches (
@@ -60,6 +61,11 @@ def init_db():
             applied_at TIMESTAMP, status TEXT DEFAULT 'new', notes TEXT
         );
     """)
+    # Migrate: add columns that may be missing in older DBs
+    for col, defn in [("usajobs_api_key","TEXT DEFAULT ''"), ("run_now","INTEGER DEFAULT 0")]:
+        try:
+            conn.execute(f"ALTER TABLE profiles ADD COLUMN {col} {defn}")
+        except: pass
     conn.commit(); conn.close()
 
 init_db()
@@ -382,6 +388,40 @@ function doUpload(f) {
   <div class="stat"><div class="sval" style="color:#22c55e">{{ st.high }}</div><div class="slab">80+ Match</div></div>
   <div class="stat"><div class="sval" style="color:#06b6d4">{{ st.applied }}</div><div class="slab">Applied</div></div>
 </div>
+{# Bot Controls card #}
+<div class="card"><div class="card-title">🤖 Bot Controls</div>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+
+    {# Auto search toggle #}
+    <form method="POST" action="/p/{{ p.id }}/toggle" style="margin:0">
+      <button class="btn {{ 'btn-d' if p.is_active else 'btn-g' }} btn-sm">
+        {{ '⏸ Pause Auto-Search' if p.is_active else '▶ Enable Auto-Search' }}
+      </button>
+    </form>
+
+    {# Run Now #}
+    <form method="POST" action="/p/{{ p.id }}/runnow" style="margin:0">
+      <button class="btn btn-p btn-sm">⚡ Run Now</button>
+    </form>
+
+    {# Interval selector #}
+    <form method="POST" action="/p/{{ p.id }}/setinterval" style="margin:0;display:flex;align-items:center;gap:6px">
+      <label style="font-size:12px;color:#94a3b8;text-transform:none;margin:0">Check every</label>
+      <select name="interval" onchange="this.form.submit()" style="width:auto;font-size:12px;padding:5px 8px">
+        {% for mins in [15, 30, 60, 120] %}
+        <option value="{{ mins }}" {{ 'selected' if p.check_interval == mins }}>{{ mins }} min</option>
+        {% endfor %}
+      </select>
+    </form>
+
+  </div>
+  <div style="margin-top:10px;font-size:12px;color:#64748b">
+    Status: <span style="color:{{ '#22c55e' if p.is_active else '#f59e0b' }}">
+      {{ '🟢 Running — next scan in ~' ~ p.check_interval ~ ' min' if p.is_active else '🟡 Paused — auto-search disabled' }}
+    </span>
+  </div>
+</div>
+
 {% if st.total > 0 %}
 <div class="card"><div class="card-title">📊 Pipeline Funnel</div>
   {% for lbl,cnt,col in [('Found',st.total,'#3b82f6'),('Scored',st.scored,'#a78bfa'),('80+ Match',st.high,'#22c55e'),('Applied',st.applied,'#06b6d4')] %}
@@ -639,6 +679,27 @@ def jstatus(jid):
     r = c.execute("SELECT profile_id FROM jobs WHERE id=?", (jid,)).fetchone()
     c.commit(); c.close()
     return redirect(f"/p/{r[0]}/applied" if r else "/")
+
+@app.route("/p/<int:pid>/runnow", methods=["POST"])
+def runnow(pid):
+    """Set run_now=1 so the bot picks it up within 30 seconds."""
+    c = get_db()
+    c.execute("UPDATE profiles SET run_now=1 WHERE id=?", (pid,))
+    c.commit(); c.close()
+    flash("⚡ Manual search triggered — jobs will appear within 2 minutes.", "success")
+    return redirect(f"/p/{pid}")
+
+@app.route("/p/<int:pid>/setinterval", methods=["POST"])
+def setinterval(pid):
+    """Update the bot check interval for this profile."""
+    mins = int(request.form.get("interval", 30))
+    if mins not in (15, 30, 60, 120):
+        mins = 30
+    c = get_db()
+    c.execute("UPDATE profiles SET check_interval=? WHERE id=?", (mins, pid))
+    c.commit(); c.close()
+    flash(f"✓ Bot will check every {mins} minutes.", "success")
+    return redirect(f"/p/{pid}")
 
 @app.route("/upload", methods=["POST"])
 def upload():

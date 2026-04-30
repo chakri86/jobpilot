@@ -242,13 +242,28 @@ if __name__ == "__main__":
             except Exception as e:
                 log.error(f"Cycle error: {e}", exc_info=True)
             
-            # Get next check interval
+            # Get next check interval from DB
             c = db()
             intervals = [r[0] for r in c.execute("SELECT check_interval FROM profiles WHERE is_active=1").fetchall()]
             c.close()
-            
-            wait = min(intervals) if intervals else 15
-            log.info(f"💤 Next cycle in {wait} minutes...")
-            time.sleep(wait * 60)
+
+            wait = min(intervals) if intervals else 30
+            log.info(f"💤 Next cycle in {wait} minutes... (Run Now available via dashboard)")
+
+            # Sleep in 30s chunks so we can respond to run_now flag quickly
+            elapsed = 0
+            while elapsed < wait * 60:
+                time.sleep(30)
+                elapsed += 30
+                c = db()
+                run_flags = [r[0] for r in c.execute("SELECT run_now FROM profiles WHERE is_active=1 AND run_now=1").fetchall()]
+                c.close()
+                if run_flags:
+                    log.info("▶ Manual run triggered from dashboard!")
+                    # Reset run_now flags
+                    c = db()
+                    c.execute("UPDATE profiles SET run_now=0 WHERE run_now=1")
+                    c.commit(); c.close()
+                    break
     except KeyboardInterrupt:
         log.info("Bot shutdown.")
