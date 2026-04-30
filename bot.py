@@ -58,7 +58,7 @@ Respond with ONLY valid JSON (no markdown, no code fence):
                 "anthropic-version": "2023-06-01"
             },
             json={
-                "model": "claude-opus-4-1-20250805",
+                "model": "claude-sonnet-4-20250514",
                 "max_tokens": 256,
                 "messages": [{"role": "user", "content": prompt}]
             },
@@ -148,9 +148,8 @@ def run_cycle():
             log.info(f"  🔍 Searching: '{s['keywords']}' in {s['location']}")
             
             try:
-                # Use new multi-source scraper
-                jobs = scrape_all(s["keywords"], s["location"], 
-                                 sources=["indeed", "linkedin", "google_jobs", "ziprecruiter"])
+                # Use new multi-source scraper (jobspy, remotive, arbeitnow, usajobs)
+                jobs = scrape_all(s["keywords"], s["location"], s.get("job_type", "fulltime"))
                 
                 for j in jobs:
                     # Check if job already exists
