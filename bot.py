@@ -72,6 +72,8 @@ Respond with ONLY valid JSON (no markdown, no code fence):
             log.warning("Rate limited by Anthropic, waiting 60s...")
             time.sleep(60)
             return score_job(api_key, resume, skills, job)
+        elif r.status_code == 400 and "credit balance" in r.text:
+            return "NO_CREDITS"
         else:
             log.error(f"Anthropic error {r.status_code}: {r.text}")
             return None
@@ -130,17 +132,22 @@ def run_cycle():
         c = db()
         searches = [dict(r) for r in c.execute("SELECT * FROM job_searches WHERE profile_id=? AND is_active=1", (pid,)).fetchall()]
         
-        # Fall back to target titles if no searches configured
+        # Fall back to target titles if no explicit searches configured
         if not searches and p.get("target_titles"):
-            log.info(f"  ℹ Using target_titles: {p['target_titles']}")
+            log.info(f"  Using target_titles: {p['target_titles']}")
             for t in p["target_titles"].split(","):
                 t = t.strip()
                 if t:
                     searches.append({
                         "keywords": t,
-                        "location": p.get("location", ""),
+                        "location": p.get("location") or "United States",
                         "job_type": p.get("job_type", "fulltime")
                     })
+
+        if not searches:
+            log.warning(f"  Profile {pid} has no searches and no target_titles - edit at http://192.168.0.249:5000/p/{pid}/edit")
+            c.close()
+            continue
 
         # Scrape all sources
         new_count = 0
@@ -178,9 +185,17 @@ def run_cycle():
                 (pid,)).fetchall()]
             
             scored_count = 0
+            credit_error = False
             for j in unscored:
+                if credit_error:
+                    break
                 sd = score_job(p["anthropic_api_key"], p["resume_text"], p.get("skills", ""), j)
-                if sd:
+                if sd == "NO_CREDITS":
+                    log.warning("  ⚠ Anthropic API has no credits — jobs will show without scores.")
+                    log.warning("  ⚠ Add credits at: https://console.anthropic.com/settings/billing")
+                    credit_error = True
+                    break
+                elif sd:
                     c.execute(
                         "UPDATE jobs SET match_score=?,match_reasons=?,match_missing=?,match_tip=? WHERE id=?",
                         (sd.get("score", 0), ", ".join(sd.get("reasons", [])), ", ".join(sd.get("missing", [])), sd.get("tip", ""), j["id"])
@@ -193,9 +208,9 @@ def run_cycle():
             log.info(f"  ✓ Scored {scored_count} jobs")
         else:
             if not p.get("anthropic_api_key"):
-                log.warning(f"  ⚠ No Anthropic API key configured")
+                log.warning(f"  ⚠ No Anthropic API key configured — jobs will show without AI scores")
             if not p.get("resume_text"):
-                log.warning(f"  ⚠ No resume text configured")
+                log.warning(f"  ⚠ No resume uploaded — add resume in profile edit to enable AI scoring")
 
         # Notify about high matches
         min_sc = p.get("min_score", 75)

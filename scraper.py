@@ -139,6 +139,9 @@ def scrape_remotive(kw: str) -> list:
         r = requests.get("https://remotive.com/api/remote-jobs",
                          params={"category": cat, "limit": 30, "search": kw}, timeout=15)
         r.raise_for_status()
+        # Keyword words that must appear in title (e.g. "product manager" → ["product","manager"])
+        kw_words = [w for w in kw.lower().split() if len(w) > 2]
+
         for item in r.json().get("jobs", []):
             title   = item.get("title",        "").strip()
             company = item.get("company_name", "").strip()
@@ -146,6 +149,10 @@ def scrape_remotive(kw: str) -> list:
             desc    = _strip_html(item.get("description", ""))[:500]
             salary  = item.get("salary", "")
             if not title or not url:
+                continue
+            # Require ALL keyword words to appear in title (strict match)
+            title_lower = title.lower()
+            if not all(w in title_lower for w in kw_words):
                 continue
             jobs.append({"id": f"remotive_{_uid(url, title)}", "title": title,
                 "company": company, "location": "Remote (US)", "salary": salary,
